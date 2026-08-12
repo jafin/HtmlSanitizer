@@ -3684,6 +3684,68 @@ zqy1QY1kkPOuMvKWvvmFIwClI2393jVVcp91eda4+J+fIYDbfJa7RY5YcNrZhTuV//9k="">
     }
 
     [Fact]
+    public void OptionsUnsetCollectionsKeepDefaultsTest()
+    {
+        var sanitizer = new HtmlSanitizer(new HtmlSanitizerOptions());
+
+        Assert.Equal(HtmlSanitizerDefaults.AllowedTags, sanitizer.AllowedTags);
+        Assert.Equal(HtmlSanitizerDefaults.AllowedAttributes, sanitizer.AllowedAttributes);
+        Assert.Equal(HtmlSanitizerDefaults.AllowedSchemes, sanitizer.AllowedSchemes);
+        Assert.Equal(HtmlSanitizerDefaults.UriAttributes, sanitizer.UriAttributes);
+        Assert.Equal(HtmlSanitizerDefaults.UriListAttributes, sanitizer.UriListAttributes);
+        Assert.Equal(HtmlSanitizerDefaults.AllowedCssProperties, sanitizer.AllowedCssProperties);
+        Assert.Equal(HtmlSanitizerDefaults.AllowedAtRules, sanitizer.AllowedAtRules);
+        Assert.Equal(HtmlSanitizerDefaults.AllowedClasses, sanitizer.AllowedClasses);
+    }
+
+    [Fact]
+    public void OptionsWithoutUriAttributesScreensUrisTest()
+    {
+        // see https://github.com/mganss/HtmlSanitizer/issues/570
+        // UriAttributes and AllowedSchemes are left unset, so they keep their defaults
+        // and href is still screened.
+
+        var sanitizer = new HtmlSanitizer(new HtmlSanitizerOptions
+        {
+            AllowedTags = new HashSet<string> { "a", "img" },
+            AllowedAttributes = new HashSet<string> { "href", "src" },
+        });
+
+        var html = @"<a href='javascript:alert(11)'>click here</a> <img src=x onerror='alert(11)'> <a href='https://example.com/ok'>ok</a>";
+        var expected = @"<a>click here</a> <img src=""x""> <a href=""https://example.com/ok"">ok</a>";
+
+        Assert.Equal(expected, sanitizer.Sanitize(html));
+    }
+
+    [Fact]
+    public void OptionsEmptyCollectionsAreHonoredTest()
+    {
+        // An explicitly empty collection is not a missing one: it must not fall back to the defaults.
+
+        var sanitizer = new HtmlSanitizer(new HtmlSanitizerOptions
+        {
+            AllowedTags = new HashSet<string> { "a" },
+            AllowedAttributes = new HashSet<string> { "href" },
+            AllowedSchemes = new HashSet<string>(),
+        });
+
+        Assert.Empty(sanitizer.AllowedSchemes);
+        Assert.Equal(@"<a>ok</a>", sanitizer.Sanitize(@"<a href='https://example.com/ok'>ok</a>"));
+    }
+
+    [Fact]
+    public void OptionsSetCollectionsReplaceDefaultsTest()
+    {
+        var sanitizer = new HtmlSanitizer(new HtmlSanitizerOptions
+        {
+            AllowedTags = new HashSet<string> { "a" },
+        });
+
+        Assert.Equal(new[] { "a" }, sanitizer.AllowedTags);
+        Assert.Equal(@"<a>ok</a>", sanitizer.Sanitize(@"<a>ok</a><div>test</div>"));
+    }
+
+    [Fact]
     public void NoScriptTest()
     {
         var sanitizer = new HtmlSanitizer();

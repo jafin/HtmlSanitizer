@@ -42,6 +42,10 @@ namespace Ganss.Xss;
 /// <item>You can specify the HTML attributes that contain URIs (such as "src", "href" etc.) through the property <see cref="UriAttributes"/>.</item>
 /// </list>
 /// </para>
+/// <para>
+/// All of these can also be set in one go by passing an <see cref="HtmlSanitizerOptions"/> object to the constructor.
+/// A collection left unset there keeps its default value, and setting one replaces the default rather than adding to it.
+/// </para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -114,17 +118,19 @@ public class HtmlSanitizer : IHtmlSanitizer
     /// Initializes a new instance of the <see cref="HtmlSanitizer"/> class
     /// with the given options.
     /// </summary>
-    /// <param name="options">Options to control the sanitizing.</param>
+    /// <param name="options">Options to control the sanitizing. Every collection left unset
+    /// falls back to its <see cref="HtmlSanitizerDefaults"/> counterpart; set a collection to
+    /// an empty one to allow nothing.</param>
     public HtmlSanitizer(HtmlSanitizerOptions options)
     {
-        AllowedTags = new HashSet<string>(options.AllowedTags, StringComparer.OrdinalIgnoreCase);
-        AllowedSchemes = new HashSet<string>(options.AllowedSchemes, StringComparer.OrdinalIgnoreCase);
-        AllowedAttributes = new HashSet<string>(options.AllowedAttributes, StringComparer.OrdinalIgnoreCase);
-        UriAttributes = new HashSet<string>(options.UriAttributes, StringComparer.OrdinalIgnoreCase);
-        UriListAttributes = new HashSet<string>(options.UriListAttributes, StringComparer.OrdinalIgnoreCase);
-        AllowedClasses = new HashSet<string>(options.AllowedCssClasses, StringComparer.OrdinalIgnoreCase);
-        AllowedCssProperties = new HashSet<string>(options.AllowedCssProperties, StringComparer.OrdinalIgnoreCase);
-        AllowedAtRules = new HashSet<CssRuleType>(options.AllowedAtRules);
+        AllowedTags = new HashSet<string>(options.AllowedTags ?? HtmlSanitizerDefaults.AllowedTags, StringComparer.OrdinalIgnoreCase);
+        AllowedSchemes = new HashSet<string>(options.AllowedSchemes ?? HtmlSanitizerDefaults.AllowedSchemes, StringComparer.OrdinalIgnoreCase);
+        AllowedAttributes = new HashSet<string>(options.AllowedAttributes ?? HtmlSanitizerDefaults.AllowedAttributes, StringComparer.OrdinalIgnoreCase);
+        UriAttributes = new HashSet<string>(options.UriAttributes ?? HtmlSanitizerDefaults.UriAttributes, StringComparer.OrdinalIgnoreCase);
+        UriListAttributes = new HashSet<string>(options.UriListAttributes ?? HtmlSanitizerDefaults.UriListAttributes, StringComparer.OrdinalIgnoreCase);
+        AllowedClasses = new HashSet<string>(options.AllowedCssClasses ?? HtmlSanitizerDefaults.AllowedClasses, StringComparer.OrdinalIgnoreCase);
+        AllowedCssProperties = new HashSet<string>(options.AllowedCssProperties ?? HtmlSanitizerDefaults.AllowedCssProperties, StringComparer.OrdinalIgnoreCase);
+        AllowedAtRules = new HashSet<CssRuleType>(options.AllowedAtRules ?? HtmlSanitizerDefaults.AllowedAtRules);
         AllowCssCustomProperties = options.AllowCssCustomProperties;
         AllowDataAttributes = options.AllowDataAttributes;
     }

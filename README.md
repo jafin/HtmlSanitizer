@@ -27,6 +27,7 @@ In order to facilitate different use cases, HtmlSanitizer can be customized at s
 - Configure HTML attributes that contain a *list* of URIs (such as "srcset", "ping") through the property `UriListAttributes`. Every entry is checked separately.
 - Provide a base URI that will be used to resolve relative URIs against.
 - Cancelable events are raised before a tag, attribute, or style is removed.
+- All of the above can be set in one go by passing an `HtmlSanitizerOptions` object to the constructor, see [Configuring with `HtmlSanitizerOptions`](#configuring-with-htmlsanitizeroptions).
 
 Usage
 -----
@@ -48,6 +49,32 @@ Assert.Equal(expected, sanitized);
 There's an [online demo](https://xss.ganss.org/), plus there's also a [.NET Fiddle](https://dotnetfiddle.net/892nOk) you can play with.
 
 More example code and a description of possible options can be found in the [Wiki](https://github.com/mganss/HtmlSanitizer/wiki).
+
+### Configuring with `HtmlSanitizerOptions`
+
+A sanitizer can also be configured in one go by passing an `HtmlSanitizerOptions` object to the constructor:
+
+```C#
+var sanitizer = new HtmlSanitizer(new HtmlSanitizerOptions
+{
+    AllowedTags = new HashSet<string> { "a", "img" },
+    AllowedAttributes = new HashSet<string> { "href", "src" },
+});
+```
+
+Each collection you set *replaces* the corresponding default rather than adding to it, so the sanitizer above allows exactly two tags and two attributes. Each collection you leave unset keeps its default from `HtmlSanitizerDefaults` - in the example, `AllowedSchemes` and `UriAttributes` are still at their defaults, so `href="javascript:alert(1)"` is stripped while `href="https://example.com"` is kept.
+
+To deliberately allow nothing, set the collection to an empty one:
+
+```C#
+var sanitizer = new HtmlSanitizer(new HtmlSanitizerOptions
+{
+    AllowedTags = new HashSet<string> { "a" },
+    AllowedCssProperties = new HashSet<string>(), // no CSS properties at all
+});
+```
+
+_Note:_ up to and including version 9.x every collection on `HtmlSanitizerOptions` started out empty, so an unset collection meant "nothing allowed" - and for `UriAttributes`, which is a screening list rather than an allow list, it meant "nothing screened", letting `javascript:` URIs through (see [#570](https://github.com/mganss/HtmlSanitizer/issues/570)). If you were relying on the old behaviour, set those collections to empty ones explicitly.
 
 ### Tags allowed by default
 `a`,
