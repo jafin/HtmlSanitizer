@@ -49,12 +49,7 @@ public sealed class TooSlowForThreadTestAttribute : Attribute
 /// <summary>
 /// Tests for <see cref="HtmlSanitizer"/>.
 /// </summary>
-/// <remarks>
-/// Partial so that a group of tests can live in its own file while staying part of this type, which
-/// is what <see cref="ThreadTest"/> reflects over: tests moved to a class of their own would drop
-/// out of the concurrency sweep without anything failing to say so. See FragmentTests.cs.
-/// </remarks>
-public partial class HtmlSanitizerTests : IClassFixture<HtmlSanitizerFixture>
+public class HtmlSanitizerTests : IClassFixture<HtmlSanitizerFixture>
 {
     public HtmlSanitizer Sanitizer { get; set; }
 
@@ -2947,6 +2942,34 @@ zqy1QY1kkPOuMvKWvvmFIwClI2393jVVcp91eda4+J+fIYDbfJa7RY5YcNrZhTuV//9k="">
     }
 
     /// <summary>
+    /// Every test class in this assembly, i.e. every public class declaring at least one test.
+    /// </summary>
+    /// <remarks>
+    /// Found rather than listed so that adding a test class puts its tests into
+    /// <see cref="ThreadTest"/> automatically. A list would have to be kept up to date by hand, and
+    /// forgetting to would leave the new tests out of the sweep without anything failing to say so -
+    /// the quiet failure this whole mechanism exists to avoid.
+    /// </remarks>
+    public static IEnumerable<Type> GetTestClasses() =>
+        typeof(HtmlSanitizerTests).GetTypeInfo().Assembly.GetTypes()
+            .Where(t => t.IsClass && t.IsPublic && !t.IsAbstract)
+            .Where(t => t.GetMethods().Any(m => m.GetCustomAttributes(typeof(FactAttribute), false).Length != 0));
+
+    /// <summary>
+    /// Constructs a test class the way xUnit would: its single public constructor, with a fresh
+    /// instance of each parameter, which is how a class fixture reaches it.
+    /// </summary>
+    private static object CreateTestClass(Type type)
+    {
+        var constructor = type.GetConstructors().Single();
+        var arguments = constructor.GetParameters()
+            .Select(p => Activator.CreateInstance(p.ParameterType))
+            .ToArray();
+
+        return constructor.Invoke(arguments);
+    }
+
+    /// <summary>
     /// Every test that <see cref="ThreadTest"/> can run, as one entry per *invocation* rather than
     /// per method: a parameterless test contributes a single entry, a [Theory] one entry per data
     /// row. Invoking a theory without its arguments only raises a parameter count mismatch, so
@@ -2954,9 +2977,14 @@ zqy1QY1kkPOuMvKWvvmFIwClI2393jVVcp91eda4+J+fIYDbfJa7RY5YcNrZhTuV//9k="">
     /// </summary>
     public static IEnumerable<(MethodInfo Method, object[] Args)> GetThreadTestInvocations()
     {
-        var methods = typeof(HtmlSanitizerTests).GetTypeInfo().GetMethods()
+        // By identity rather than by name: another test class is free to have a method of the same
+        // name, and only this one is the sweep itself.
+        var thisTest = typeof(HtmlSanitizerTests).GetMethod(nameof(ThreadTest));
+
+        var methods = GetTestClasses()
+            .SelectMany(t => t.GetMethods())
             .Where(m => m.GetCustomAttributes(typeof(FactAttribute), false).Cast<FactAttribute>().Any(f => f.Skip == null))
-            .Where(m => m.Name != nameof(ThreadTest)
+            .Where(m => m != thisTest
                 && m.GetCustomAttributes(typeof(NotThreadSafeAttribute), false).Length == 0
                 && m.GetCustomAttributes(typeof(TooSlowForThreadTestAttribute), false).Length == 0);
 
@@ -3011,8 +3039,14 @@ zqy1QY1kkPOuMvKWvvmFIwClI2393jVVcp91eda4+J+fIYDbfJa7RY5YcNrZhTuV//9k="">
             var allGo = new ManualResetEvent(false);
             Exception firstException = null;
             var failures = 0;
-            var fixture = new HtmlSanitizerFixture();
-            var tests = new HtmlSanitizerTests(fixture);
+            // One instance per test class, shared by every thread in the round that needs it, and
+            // built up front so constructing it is not itself part of what the threads race over.
+            // Sharing is the point: an instance and its fixture are what the round puts under
+            // concurrent load.
+            var instances = round
+                .Select(i => i.Method.DeclaringType)
+                .Distinct()
+                .ToDictionary(t => t, CreateTestClass);
             var waiting = round.Length;
             var threads = round
                 .Select(invocation => new Thread(() =>
@@ -3023,7 +3057,7 @@ zqy1QY1kkPOuMvKWvvmFIwClI2393jVVcp91eda4+J+fIYDbfJa7RY5YcNrZhTuV//9k="">
                         // Wait for the whole batch to be ready, so the tests actually overlap
                         // instead of trickling through as the threads are started one by one.
                         allGo.WaitOne();
-                        invocation.Method.Invoke(tests, invocation.Args);
+                        invocation.Method.Invoke(instances[invocation.Method.DeclaringType], invocation.Args);
                     }
                     catch (Exception ex)
                     {
@@ -3136,10 +3170,21 @@ zqy1QY1kkPOuMvKWvvmFIwClI2393jVVcp91eda4+J+fIYDbfJa7RY5YcNrZhTuV//9k="">
         Assert.DoesNotContain(invocations, i => i.Method.Name == nameof(SanitizeSrcdocDeeplyNestedIsBoundedTest));
         Assert.DoesNotContain(invocations, i => i.Method.Name == nameof(ConcurrentSanitizeProducesSameResultTest));
 
-        // Tests kept in another file take part only for as long as that file declares them part of
-        // this class. Moving them to a class of their own would drop them from the sweep with
-        // nothing failing to say so, so the discovery of one of them is asserted here.
-        Assert.Contains(invocations, i => i.Method.Name == nameof(SanitizeFragmentKeepsTagValidOnlyInContextTest));
+        // Discovery spans the assembly, so a test class takes part without being registered
+        // anywhere. Narrowing it back to a single class would leave every other class out of the
+        // sweep while this test still passed on the strength of the count alone, so assert the
+        // sweep actually reaches beyond the class it is declared in.
+        Assert.Contains(typeof(HtmlSanitizerTests), GetTestClasses());
+        Assert.Contains(typeof(HtmlSanitizerFragmentTests), GetTestClasses());
+        Assert.Contains(invocations, i => i.Method.DeclaringType == typeof(HtmlSanitizerFragmentTests));
+        Assert.True(invocations.Select(i => i.Method.DeclaringType).Distinct().Count() > 1,
+            "the sweep should span every test class, not just the one it is declared in");
+
+        // ThreadTest invokes each entry on an instance of the class declaring it, so every class the
+        // sweep reaches has to be constructible - including through whatever fixture its constructor
+        // asks for. A class that is not would fail there as a test failure blamed on concurrency.
+        Assert.All(invocations.Select(i => i.Method.DeclaringType).Distinct(), t =>
+            Assert.IsType(t, CreateTestClass(t), exactMatch: false));
 
         // Every entry must be invocable: argument count has to match the signature.
         Assert.All(invocations, i =>

@@ -10,12 +10,7 @@ namespace Ganss.Xss.Tests;
 /// and its <see cref="IElement"/> overload, which parse a fragment in the context of the element it
 /// will be inserted into rather than in &lt;body&gt;.
 /// </summary>
-/// <remarks>
-/// Part of <see cref="HtmlSanitizerTests"/> rather than a class of its own so these tests stay in the
-/// set <see cref="HtmlSanitizerTests.ThreadTest"/> reflects over, which is what exercises them
-/// concurrently.
-/// </remarks>
-public partial class HtmlSanitizerTests
+public class HtmlSanitizerFragmentTests
 {
     // The case from the issue: parsing in body context drops a lone th, because a th is only valid
     // deeper in the tree. Naming the context it is destined for keeps it.
